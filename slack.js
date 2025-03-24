@@ -1,14 +1,63 @@
 const express = require("express");
 const crypto = require("crypto");
 const axios = require("axios");
-
 const app = express();
+
+// rawBody取得のために middleware を自前でセット
+app.use((req, res, next) => {
+  let data = '';
+  req.on('data', chunk => {
+    data += chunk;
+  });
+  req.on('end', () => {
+    req.rawBody = data;
+    next();
+  });
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET;
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
+
+// GPT令子エンドポイント
+app.post("/reiko", async (req, res) => {
+  const userMessage = req.body.message;
+  if (!userMessage) {
+    return res.status(400).json({ error: "メッセージが必要です" });
+  }
+
+  try {
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content:
+              "あなたはバリキャリ系の女性AI『令子』。口調はクールで的確、語尾は「〜だね！」が特徴。"
+          },
+          { role: "user", content: userMessage }
+        ]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const reply = response.data.choices[0].message.content;
+    res.json({ reply });
+  } catch (error) {
+    console.error("エラー:", error.response?.data || error.message);
+    res.status(500).json({ error: "令子の返答に失敗しました" });
+  }
+});
 
 // Slack署名検証
 function verifySlackRequest(req) {
@@ -34,6 +83,10 @@ app.post("/slack/events", async (req, res) => {
 
   if (type === "url_verification") {
     return res.send({ challenge });
+  }
+
+  if (!verifySlackRequest(req)) {
+    return res.status(401).send("Unauthorized");
   }
 
   if (type === "event_callback" && event.type === "app_mention") {
@@ -65,7 +118,6 @@ app.post("/slack/events", async (req, res) => {
 
     const reply = response.data.choices[0].message.content;
 
-    // Slackへ返信
     await axios.post(
       "https://slack.com/api/chat.postMessage",
       {
@@ -84,4 +136,9 @@ app.post("/slack/events", async (req, res) => {
   } else {
     res.status(200).end();
   }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Reiko API is running on port ${PORT}`);
 });
