@@ -1,41 +1,10 @@
-async function getReikoReply(message) {
-  const response = await axios.post(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "system",
-          content: "あなたはSlack上のアシスタント令子。クールなバリキャリ口調で、語尾は「〜だね！」が特徴。"
-        },
-        { role: "user", content: message }
-      ]
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-
-  return response.data.choices[0].message.content;
-}
-
-await saveMemory({
-  user_id: event.user,
-  agent: "reiko",
-  message: userMessage,
-  reply: reply
-});
-
 const express = require("express");
 const crypto = require("crypto");
 const axios = require("axios");
+const { saveMemory } = require("./lib/supabase");
 
 const app = express();
 
-// rawBody保存（Slack署名検証用）
 app.use((req, res, next) => {
   let data = "";
   req.on("data", chunk => {
@@ -56,7 +25,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET;
 
-// GPT応答生成関数（共通化）
+// GPT応答を生成
 async function getReikoReply(message) {
   const response = await axios.post(
     "https://api.openai.com/v1/chat/completions",
@@ -65,8 +34,7 @@ async function getReikoReply(message) {
       messages: [
         {
           role: "system",
-          content:
-            "あなたはSlack上のアシスタント令子。クールなバリキャリ口調で、語尾は「〜だね！」が特徴。"
+          content: "あなたはSlack上のアシスタント令子。クールなバリキャリ口調で、語尾は「〜だね！」が特徴。"
         },
         { role: "user", content: message }
       ]
@@ -81,7 +49,7 @@ async function getReikoReply(message) {
   return response.data.choices[0].message.content;
 }
 
-// Slack応答送信関数（共通化）
+// Slack返信関数
 async function sendSlackMessage(channel, text) {
   await axios.post(
     "https://slack.com/api/chat.postMessage",
@@ -98,16 +66,16 @@ async function sendSlackMessage(channel, text) {
   );
 }
 
-// /reiko（API経由）用のエンドポイント
+// Reiko API（手動POST用）
 app.post("/reiko", async (req, res) => {
   const userMessage = req.body.message;
+  const user_id = req.body.user_id || "shoma_001";
 
-  if (!userMessage) {
-    return res.status(400).json({ error: "メッセージが必要です" });
-  }
+  if (!userMessage) return res.status(400).json({ error: "メッセージが必要です" });
 
   try {
     const reply = await getReikoReply(userMessage);
+    await saveMemory({ user_id, agent: "reiko", message: userMessage, reply });
     res.json({ reply });
   } catch (error) {
     console.error("エラー:", error.response?.data || error.message);
@@ -139,36 +107,35 @@ function verifySlackRequest(req) {
   }
 }
 
-// Slackイベント受信エンドポイント
+// Slackエンドポイント
 app.post("/slack/events", async (req, res) => {
   const { type, challenge, event } = req.body;
 
-  // ✅ 初回認証 challenge 対応
   if (type === "url_verification" && challenge) {
     res.setHeader("Content-Type", "application/json");
     return res.status(200).send(JSON.stringify({ challenge }));
   }
 
-  // ✅ 署名検証
   if (!verifySlackRequest(req)) {
     return res.status(401).send("Unauthorized");
   }
 
-  // ✅ メンション or DM の場合
   if (type === "event_callback") {
     const eventType = event.type;
 
-    // メンション対応（チャンネル内で @令子）
+    // メンション（チャンネル）
     if (eventType === "app_mention") {
       const userMessage = event.text;
       const reply = await getReikoReply(userMessage);
+      await saveMemory({ user_id: event.user, agent: "reiko", message: userMessage, reply });
       await sendSlackMessage(event.channel, reply);
     }
 
-    // DM対応（コチャ対応）
+    // DM（コチャ）
     if (eventType === "message" && event.channel_type === "im" && !event.bot_id) {
       const userMessage = event.text;
       const reply = await getReikoReply(userMessage);
+      await saveMemory({ user_id: event.user, agent: "reiko", message: userMessage, reply });
       await sendSlackMessage(event.channel, reply);
     }
 
@@ -178,19 +145,8 @@ app.post("/slack/events", async (req, res) => {
   res.status(200).end();
 });
 
-// サーバー起動
+// 起動
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Reiko API is running on port ${PORT}`);
 });
-
-const { saveMemory } = require("./lib/supabase"); // ファイル作ったらこれでOK！
-
-// 例：Slackの返答のあと
-await saveMemory({
-  user_id: event.user,
-  agent: "reiko",
-  message: userMessage,
-  reply: reply
-});
-
