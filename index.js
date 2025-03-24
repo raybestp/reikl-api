@@ -152,3 +152,14 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Reiko API is running on port ${PORT}`);
 });
+
+const { saveMemory } = require("./lib/supabase"); // ファイル作ったらこれでOK！
+
+// 例：Slackの返答のあと
+await saveMemory({
+  user_id: event.user,
+  agent: "reiko",
+  message: userMessage,
+  reply: reply
+});
+
