@@ -91,6 +91,27 @@ function verifySlackRequest(req) {
 app.post("/slack/events", async (req, res) => {
   const { type, challenge, event } = req.body;
 
+if (type === "event_callback") {
+  const eventType = event.type;
+
+  // ✅ app_mention（チャンネルでの @メンション）
+  if (eventType === "app_mention") {
+    const userMessage = event.text;
+    const reply = await getReikoReply(userMessage);
+    await sendSlackMessage(event.channel, reply);
+  }
+
+  // ✅ message.im（DM）
+  if (eventType === "message" && event.channel_type === "im" && !event.bot_id) {
+    const userMessage = event.text;
+    const reply = await getReikoReply(userMessage);
+    await sendSlackMessage(event.channel, reply);
+  }
+
+  return res.status(200).end();
+}
+
+  
   // ✅ challenge返却（Slack初回接続認証）
   if (type === "url_verification" && challenge) {
     res.setHeader("Content-Type", "application/json");
