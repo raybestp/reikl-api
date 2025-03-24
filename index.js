@@ -1,3 +1,34 @@
+async function getReikoReply(message) {
+  const response = await axios.post(
+    "https://api.openai.com/v1/chat/completions",
+    {
+      model: "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: "あなたはSlack上のアシスタント令子。クールなバリキャリ口調で、語尾は「〜だね！」が特徴。"
+        },
+        { role: "user", content: message }
+      ]
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  return response.data.choices[0].message.content;
+}
+
+await saveMemory({
+  user_id: event.user,
+  agent: "reiko",
+  message: userMessage,
+  reply: reply
+});
+
 const express = require("express");
 const crypto = require("crypto");
 const axios = require("axios");
