@@ -1,7 +1,11 @@
 const express = require("express");
 const axios = require("axios");
 const app = express();
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString(); // Slack署名検証＆challengeのために必要！
+  }
+}));
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
