@@ -1,3 +1,11 @@
+const chrono = require("chrono-node");
+
+const normalizeDue = (text) => {
+  const parsed = chrono.parseDate(text, { forwardDate: true });
+  if (!parsed) return null;
+  return parsed.toISOString().split("T")[0];
+};
+
 const axios = require("axios");
 require("dotenv").config();
 
@@ -56,3 +64,4 @@ const run = async () => {
 };
 
 run();
+
