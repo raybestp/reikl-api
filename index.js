@@ -46,6 +46,12 @@ app.post("/webhook/reiko", async (req, res) => {
         let resultJson;
         try {
             resultJson = JSON.parse(resultText);
+                        // DeepSeekからのJSON変換後
+            if (resultJson.type && !resultJson.classification) {
+                resultJson.classification = resultJson.type;
+                delete resultJson.type;
+            }
+
         } catch (e) {
             console.error("Invalid JSON from DeepSeek:", resultText);
             return res.status(500).send("Invalid JSON returned from DeepSeek");
