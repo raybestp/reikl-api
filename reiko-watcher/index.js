@@ -38,7 +38,7 @@ const run = async () => {
             classification,
             content,
             project,
-            due
+            due: normalizeDue(due || content)
           });
 
           // 3. 処理済みフラグをSupabaseに書き戻す
