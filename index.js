@@ -7,8 +7,9 @@ app.use(express.json());
 
 // Slack Event Verification (for URL verification during subscription)
 app.post("/webhook/reiko", async (req, res) => {
+    // Slackの challenge 確認用
     if (req.body.type === "url_verification") {
-        return res.status(200).send(req.body.challenge); // Slack challenge対応
+        return res.status(200).send(req.body.challenge);
     }
 
     const message = req.body.event && req.body.event.text;
@@ -19,7 +20,7 @@ app.post("/webhook/reiko", async (req, res) => {
     }
 
     try {
-        // 1. DeepSeekで分類
+        // 1. DeepSeek へメッセージを送信して分類
         const dsResponse = await axios.post("https://api.deepseek.com/v1/chat/completions", {
             model: "deepseek-chat",
             messages: [
@@ -36,8 +37,11 @@ app.post("/webhook/reiko", async (req, res) => {
             }
         });
 
-        const resultText = dsResponse.data.choices[0].message.content;
+        let resultText = dsResponse.data.choices[0].message.content;
         console.log("DeepSeek raw output:", resultText);
+
+        // ```json ... ``` を除去
+        resultText = resultText.replace(/```json|```/g, "").trim();
 
         let resultJson;
         try {
@@ -47,7 +51,7 @@ app.post("/webhook/reiko", async (req, res) => {
             return res.status(500).send("Invalid JSON returned from DeepSeek");
         }
 
-        // 2. Supabaseへ保存
+        // 2. Supabase に保存
         const supabaseRes = await axios.post(`${process.env.SUPABASE_URL}/rest/v1/project_logs`, resultJson, {
             headers: {
                 "apikey": process.env.SUPABASE_KEY,
